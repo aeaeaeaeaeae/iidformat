@@ -118,9 +118,20 @@ class IIDFile:
             self.groups.add(name=group, entries=[entry])
 
     def fetch(self, keys=None, groups=None, iids=False, segs=False):
+        """Lazy loads entries from file
+
+        :param keys:    (list) keys to fetch
+        :param groups:  (list) groups to fetch
+        :param iids:    (bool) fetches iids
+        :param segs:    (bool) fetches segments
+        :return:        (list) of entries fetched
+        """
 
         if isinstance(keys, int):
             keys = [keys]
+
+        if isinstance(groups, str):
+            groups = [groups]
 
         keys = keys if keys is not None else []
 
@@ -139,6 +150,9 @@ class IIDFile:
             self.iids.fetch(keys)
 
         self.lut.fetched.update(keys)
+
+        return [self.lut.entries[key] for key in keys]
+
 
     def group(self, name, entries=None, keys=None, iids=None, segs=None):
         self.groups.add(name, entries=entries, keys=keys, iids=iids, segs=segs)
