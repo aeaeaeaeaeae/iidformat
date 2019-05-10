@@ -427,6 +427,30 @@ class Groups:
 
         return pack("I", len(groups)) + groups + buffer
 
+    def list(self):
+        """List group names
+
+        :return:  (list) group names
+        """
+
+        return sorted(self.entries.keys())
+
+    def get(self, groups):
+        """Get entries in groups
+
+        :param groups:  (list) group names
+        :return:        (list) lut entries
+        """
+
+        if isinstance(groups, str):
+            groups = [groups]
+
+        out = []
+        for group in groups:
+            out.extend(list(self.entries[group].entries))
+
+        return out
+
 
 class Group:
 
