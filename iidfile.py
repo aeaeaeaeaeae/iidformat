@@ -528,7 +528,7 @@ class Segment:
     def dump(self, offset=None):
 
         regs = self.regions.dump()
-        buf = pack("IHHHHI", self.area, *self.bbox, self.key)
+        buf = pack("IHHHHI", self.key, *self.bbox, self.area)
         buf += regs
 
         if offset is not None:
