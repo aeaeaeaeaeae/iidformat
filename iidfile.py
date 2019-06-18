@@ -133,6 +133,7 @@ class IIDFile:
             keys = [entry.key for entry in self.lut.entries]
             iids = True
             segs = True
+            self.groups.fetch(self.groups.entries)
 
         else:
 
@@ -143,9 +144,6 @@ class IIDFile:
                 groups = [groups]
 
             keys = keys if keys is not None else []
-
-            if isinstance(groups, str):
-                groups = [groups]
 
             if groups:
                 keys += list(chain.from_iterable([group.keys() for group in self.groups.fetch(groups)]))
