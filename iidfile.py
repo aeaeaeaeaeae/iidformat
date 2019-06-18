@@ -117,35 +117,43 @@ class IIDFile:
         if group:
             self.groups.add(name=group, entries=[entry])
 
-    def fetch(self, keys=None, groups=None, iids=False, segs=False):
+    def fetch(self, everything=False, keys=None, groups=None, iids=False, segs=False):
         """Lazy loads entries from file
 
-        :param keys:    (list) keys to fetch
-        :param groups:  (list) groups to fetch
-        :param iids:    (bool) fetches iids
-        :param segs:    (bool) fetches segments
-        :return:        (list) of entries fetched
+        :param everything:  (bool) load everything
+        :param keys:        (list) keys to fetch
+        :param groups:      (list) groups to fetch
+        :param iids:        (bool) fetches iids
+        :param segs:        (bool) fetches segments
+        :return:            (list) of entries fetched
         """
 
-        if isinstance(keys, int):
-            keys = [keys]
+        if everything:
 
-        if isinstance(groups, str):
-            groups = [groups]
+            keys = [entry.key for entry in self.lut.entries]
+            iids = True
+            segs = True
 
-        keys = keys if keys is not None else []
+        else:
 
-        if isinstance(groups, str):
-            groups = [groups]
+            if isinstance(keys, int):
+                keys = [keys]
 
-        if groups:
-            keys += list(chain.from_iterable([group.keys() for group in self.groups.fetch(groups)]))
+            if isinstance(groups, str):
+                groups = [groups]
+
+            keys = keys if keys is not None else []
+
+            if isinstance(groups, str):
+                groups = [groups]
+
+            if groups:
+                keys += list(chain.from_iterable([group.keys() for group in self.groups.fetch(groups)]))
 
         keys = set(keys)
 
         if segs:
             self.segs.fetch(keys)
-
         if iids:
             self.iids.fetch(keys)
 
