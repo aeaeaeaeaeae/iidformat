@@ -171,6 +171,9 @@ class IIDFile:
         if not isinstance(iids, list):
             iids = [iids]
 
+        if is_hex:
+            iids = [bytes.fromhex(iid) for iid in iids]
+
         if isinstance(groups, str):
             groups = [groups]
 
