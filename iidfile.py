@@ -159,6 +159,31 @@ class IIDFile:
 
         return [self.lut.entries[key] for key in keys]
 
+    def find(self, iids, groups=None, is_hex=False):
+        """Looks for matching iids in file
+
+        :param iids:    (str|list) iids to look for
+        :param groups:  (str|list) limit search to groups
+        :param is_hex:  (bool) should iids be parsed as hex formatted byte strings?
+        :returns:       (list) { key, iid }
+        """
+
+        if not isinstance(iids, list):
+            iids = [iids]
+
+        if isinstance(groups, str):
+            groups = [groups]
+
+        if groups:
+            keys = list(chain.from_iterable([group.keys() for group in self.groups.fetch(groups)]))
+        else:
+            keys = [entry.key for entry in self.lut.entries]
+
+        # TODO: currently ignoring domain, how should this be included?
+        entries = self.fetch(keys=keys, iids=True)
+        matches = [entry for entry in entries if entry.iid.iid in iids]
+
+        return matches
 
     def group(self, name, entries=None, keys=None, iids=None, segs=None):
         self.groups.add(name, entries=entries, keys=keys, iids=iids, segs=segs)
