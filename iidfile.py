@@ -33,7 +33,7 @@ def dump_str(s):
 
 class IIDFile:
 
-    def __init__(self, fpath=None, find=None):
+    def __init__(self, fpath=None):
 
         self.exists = fpath is not None
 
@@ -44,17 +44,10 @@ class IIDFile:
             self.filesize = os.stat(self.file.name).st_size
 
         self.header = Header(self)
-
-        if find:
-            self.lut = LookupTable(self)
-            self.iids = IIDs(self)
-            self.meta = Metadata(self)
-            self.groups = Groups(self)
-        else:
-            self.lut = LookupTable(self)
-            self.iids = IIDs(self)
-            self.meta = Metadata(self)
-            self.groups = Groups(self)
+        self.lut = LookupTable(self)
+        self.iids = IIDs(self)
+        self.meta = Metadata(self)
+        self.groups = Groups(self)
 
         # Lazy
         self.segs = Segments(self)
