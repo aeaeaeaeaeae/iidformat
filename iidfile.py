@@ -12,6 +12,8 @@ uint32 = 4  # bytes
 
 class BufferLocation:
 
+    __slots__ = ('offset', 'length', 'buffer')
+
     def __init__(self, offset=0, length=0, buffer=None):
 
         self.offset = offset
@@ -292,6 +294,8 @@ class LookupTable:
 
 class LookupTableEntry:
 
+    __slots__ = ('key', 'iid', 'seg', 'buffer')
+
     length = 5*uint32
 
     def __init__(self, key, iid=None, seg=None, buffer=False):
@@ -354,6 +358,8 @@ class IIDs:
 
 
 class IID:
+
+    __slots__ = ('iid', 'domain', 'key', 'bufloc')
 
     def __init__(self, iid=None, domain=None, key=None, bufloc=None):
 
@@ -537,6 +543,8 @@ class Segments:
 
 class Segment:
 
+    __slots__ = ('key', 'bbox', 'area', 'regions', 'bufloc')
+
     def __init__(self, key=None, bbox=None, area=None, regions=None, bufloc=None):
 
         self.key = key
@@ -586,6 +594,8 @@ class Regions:
 
 
 class Region:
+
+    __slots__ = ('mask', 'bbox')
 
     def __init__(self, mask=None, bbox=None):
 
