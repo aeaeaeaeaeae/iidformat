@@ -289,8 +289,6 @@ class LookupTable:
         offset, length = self.bufloc.offset, self.bufloc.length
         num_entries = length // LookupTableEntry.length
 
-        keys = [0, 1, 3, 8]
-
         if keys:
             self.entries = [None] * num_entries  # Initiate full lut with None
             for key in keys:
