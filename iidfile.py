@@ -35,7 +35,10 @@ def dump_str(s):
 
 class IIDFile:
 
-    def __init__(self, fpath=None):
+    def __init__(self, fpath=None, groups=None):
+
+        if isinstance(groups, str):
+            groups = [groups]
 
         self.exists = fpath is not None
 
@@ -46,10 +49,14 @@ class IIDFile:
             self.filesize = os.stat(self.file.name).st_size
 
         self.header = Header(self)
-        self.lut = LookupTable(self)
-        self.iids = IIDs(self)
         self.meta = Metadata(self)
         self.groups = Groups(self)
+
+        self.lut = None
+        keys = list(chain.from_iterable([group.keys() for group in self.groups.fetch(groups)])) if groups else None
+
+        self.lut = LookupTable(self, keys=keys)
+        self.iids = IIDs(self)
 
         # Lazy
         self.segs = Segments(self)
@@ -75,7 +82,6 @@ class IIDFile:
         self.meta.bufloc = BufferLocation(offset, len(meta))
         offset += len(meta)
 
-        l = len(groups)
         self.groups.bufloc = BufferLocation(offset, len(groups))
         offset += len(groups)
 
@@ -97,7 +103,6 @@ class IIDFile:
 
     def add(self, iid, seg, group=None):
         """
-
         :param iid:    (obj) IID, required
         :param seg:    (obj) Segment, required
         :param group:  (str) Group name
@@ -437,6 +442,11 @@ class Groups:
         return group
 
     def fetch(self, groups):
+        """Fetches data for requested groups, this will overwrite any existing keys and entries.
+
+        :param groups:  (str) group name
+        :returns:       (list) group objects
+        """
 
         for name in groups:
             group = self.entries[name]
@@ -446,6 +456,7 @@ class Groups:
         return [self.entries[name] for name in groups]
 
     def load(self):
+        """Lazy loads groups from buffer"""
 
         o, l = self.bufloc.offset, self.bufloc.length
         buf = self.mmap[o:o+l]
@@ -501,22 +512,51 @@ class Groups:
 class Group:
 
     def __init__(self, name, entries=None, bufloc=None):
+        """
+
+        :param name:
+        :param entries:
+        :param bufloc:
+        """
 
         self.name = name
+        self.keys_set = None
         self.entries = set(entries) if entries else None
         self.bufloc = bufloc
 
     def add(self, entries):
+        """Adds entries to group, maintains keys set.
+
+        :param entries:  (list) LUT entries
+        """
         if self.entries is None:
             self.entries = set(entries)
         else:
             self.entries.update(entries)
 
-    def keys(self):
-        return [entry.key for entry in list(self.entries)] if self.entries else None
+        keys = [entry.key for entry in entries]
+        if self.keys is None:
+            self.keys_set = set(keys)
+        else:
+            self.keys_set.update(keys)
 
-    def load(self, buf, lut):
-        self.add([lut.entries[k] for k in unpack("%sI" % (len(buf) // uint32), buf)])
+    def keys(self):
+        """
+        :returns:  (list) sorted keys
+        """
+        return sorted(list(self.keys_set))
+
+    def load(self, buf, lut=None):
+        """Loads group keys from buffer and maps group entries list to LUT if LUT is loaded.
+
+        This method will overwrite the keys and entries fields with the data from the buffer.
+
+        :param buf:  (buffer) group buffer
+        :param lut:  (obj) IIDFile LUT
+        """
+        self.keys_set = set(unpack("%sI" % (len(buf) // uint32), buf))  # Load all keys from buffer
+        if lut:
+            self.entries = set([lut.entries[k] for k in self.keys_set])
 
     def dump(self):
         return pack("%sI" % len(self.entries), *[entry.key for entry in list(self.entries)])
