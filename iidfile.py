@@ -265,27 +265,41 @@ class Metadata:
 
 class LookupTable:
 
-    def __init__(self, iidfile):
+    def __init__(self, iidfile, keys=None):
+        """
+        :param iidfile:  (obj) IIDFile
+        :param keys:     (list) keys to load, as when filtering by groups
+        """
 
         self.iidfile = iidfile
         self.entries = []
-        self.fetched = set()
+        self.fetched = set()  # Keys of entries with fetched segment
 
         if iidfile.exists:
             self.bufloc = iidfile.header.bufloc_lut
             self.mmap = iidfile.mmap
-            self.load()
+            self.load(keys)
 
     def add(self, key, iid, seg):
         entry = LookupTableEntry(key, iid, seg)
         self.entries.append(entry)
         return entry
 
-    def load(self):
-        o, l = self.bufloc.offset, self.bufloc.offset + self.bufloc.length
-        for o in range(o, l, LookupTableEntry.length):
-            key = len(self.entries)
-            self.entries.append(LookupTableEntry(key=key, buffer=self.mmap[o:o+LookupTableEntry.length]))
+    def load(self, keys=None):
+        offset, length = self.bufloc.offset, self.bufloc.length
+        num_entries = length // LookupTableEntry.length
+
+        keys = [0, 1, 3, 8]
+
+        if keys:
+            self.entries = [None] * num_entries  # Initiate full lut with None
+            for key in keys:
+                o = offset + key * LookupTableEntry.length
+                self.entries[key] = LookupTableEntry(key=key, buffer=self.mmap[o:o + LookupTableEntry.length])
+        else:
+            for key in range(num_entries):
+                o = offset + key * LookupTableEntry.length
+                self.entries.append(LookupTableEntry(key=key, buffer=self.mmap[o:o + LookupTableEntry.length]))
 
     def dump(self):
         buffer = b''.join([entry.dump() for entry in self.entries])
@@ -330,9 +344,10 @@ class IIDs:
     def load(self):
         offset = self.iidfile.header.bufloc_iids.offset
         for entry in self.iidfile.lut.entries:
-            o, l = offset + entry.iid.bufloc.offset, entry.iid.bufloc.length
-            buffer = self.mmap[o:o+l]
-            entry.iid.load(buffer)
+            if entry:
+                o, l = offset + entry.iid.bufloc.offset, entry.iid.bufloc.length
+                buffer = self.mmap[o:o+l]
+                entry.iid.load(buffer)
 
     def fetch(self, keys):
 
