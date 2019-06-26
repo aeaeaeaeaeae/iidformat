@@ -535,7 +535,7 @@ class Group:
             self.entries.update(entries)
 
         keys = [entry.key for entry in entries]
-        if self.keys is None:
+        if self.keys_set is None:
             self.keys_set = set(keys)
         else:
             self.keys_set.update(keys)
