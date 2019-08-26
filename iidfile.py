@@ -36,6 +36,10 @@ def dump_str(s):
 class IIDFile:
 
     def __init__(self, fpath=None, groups=None):
+        """
+        :param fpath:   (str) path to '.iid' file, creates empty IIDFile if None is provided.
+        :param groups:  (list) only load LUT for given group.
+        """
 
         if isinstance(groups, str):
             groups = [groups]
