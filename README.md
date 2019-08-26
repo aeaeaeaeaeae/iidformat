@@ -19,6 +19,8 @@ An IID is composed of two raw byte-strings, _domain_ and _iid_. The _domain_ def
 Features 
 ---------------
 
+### Memory-mapped
+
 An IID-file is structured with a header and lookup table that maps the memory location of the IIDs and the corresponding segments. This enables selective (lazy) loading file-content. Lazy-loading is usefull when searching through large IID-files since you can limit parsing to the parts needed. This python implementation uses `mmap` to parse spesific parts of the file-buffer.
 
 ### Segments and regions
@@ -51,13 +53,21 @@ __Naming convension__
 
 ```json
 {
-  "image": {
-    "height": "image height (pixels)",
-    "width": "image width (pixels)"
-  },
-  "camera": {             camera properties
-    TODO
-  }
+    "image": {
+        "width": "integer (pixels)",
+        "height": "integer (pixels"
+    }, 
+    "camera": {
+        "translate": "float 3 vector", 
+        "rotate": "float 3 vector (degrees)", 
+        "fstop": "float", 
+        "focus": "float"
+    }, 
+    "keyframes": {
+        "frame": "integer", 
+        "lastFrame": "integer", 
+        "firstFrame": "integer"
+    }
 }
 ```
 
