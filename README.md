@@ -4,7 +4,7 @@
 
 `.iid` is a memory-mapped format for archival, search and retrival of image segmentations. This repository contains a python parser and some example files.
 
-![segmentation](assets/segmentation.jpg)
+![segmentation](https://github.com/aeaeaeaeaeae/data/blob/master/segmentation.jpg)
 
 #### Segments and Individual-IDentifier
 
@@ -37,7 +37,7 @@ __Segment attributes__
     - bbox: region bounding box
     - buffer: binary byte buffer
 
-![image segment regions](assets/image_segments_regions.jpg)
+![image segment regions](https://github.com/aeaeaeaeaeae/data/blob/master/image_segments_regions.jpg)
 
 ### Groups
 
