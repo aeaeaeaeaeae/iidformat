@@ -1,6 +1,6 @@
 # IID segmentation format (.iid)
 
-> DISCLAIMER: This is still under development, it's been implemented to store the segmentation data for [ae73edb74571e4e2](https://www.instagram.com/ae73edb74571e4e2).  
+> DISCLAIMER: This is still under development, it's been implemented to store the segmentation data for [ae73edb74571e4e2](https://www.instagram.com/ae73edb74571e4e2), so it works, but use it at your own risk.
 
 `.iid` is a memory-mapped format for archival, search and retrival of image segmentations. This repository contains a python parser and some example files.
 
