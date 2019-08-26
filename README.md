@@ -55,7 +55,7 @@ __Naming convension__
 {
     "image": {
         "width": "integer (pixels)",
-        "height": "integer (pixels"
+        "height": "integer (pixels)"
     }, 
     "camera": {
         "translate": "float 3 vector", 
