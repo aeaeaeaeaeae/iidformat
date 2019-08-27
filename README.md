@@ -1,8 +1,8 @@
 # IID fileformat (.iid)
 
-> DISCLAIMER: This is still under development, it's been implemented to store the segmentation data for [ae73edb74571e4e2](https://www.instagram.com/ae73edb74571e4e2), so it works, but use it at your own risk.
+> DISCLAIMER: This is still under development, it's been implemented to store the segmentation data for [ae73edb74571e4e2](https://www.instagram.com/ae73edb74571e4e2) so it works but change will happen.
 
-`.iid` is a memory-mapped format for archival, search and retrival of image segmentations. This repository contains a python parser and some example files.
+`.iid` is a memory-mapped format for archival, search and retrival of image segmentations. This repository contains a python implementation and some example files.
 
 ![segmentation](https://github.com/aeaeaeaeaeae/data/blob/master/segmentation.jpg)
 
@@ -10,9 +10,9 @@
 
 An _IID-file_ only stores the segmentation, not the actual image. The segments are binary masks that covers sections of the image. The segments are labeled with **Individual IDentifiers** `IID`. These are _arbritary_ and _globally unique_ IDs associated with a spesific _individual_, where an individual is a distinct entity (object, concept, event and so on). 
 
-An IID is _arbritary_ in the sense that it does not have any formal relationship with the data it labels (It's not a hash). It's _Globally unique_ in the sense that it is a global label, any data labeled with a specific IID is considered part of this individual.
+An IID is _arbritary_ in the sense that it does not have any formal relationship with the data it labels (it's not a hash). It's _globally unique_ in the sense that it is a global label, any data labeled with a specific IID is considered part of this individual.
 
-IIDs lets the data drive its own the definition. Since an IID is arbritary (or made from random bytes) it is also meaningless, meaning therefore flow from the data to the label. The data (as experience) defines the individual (as word).
+IIDs lets the data drive its own the definition. Since an IID is arbritary (made from random bytes) it is also meaningless, meaning therefore flows from the data to the label. The data (as experience) defines the individual (as word).
 
 An IID is composed of two raw byte-strings, _domain_ and _iid_. The _domain_ defines the context (what language/protocol) and _iid_ defines the name of that individual in that context. There is no fixed length for either the _domain_ or _iid_ bytestring.
 
@@ -21,11 +21,11 @@ Features
 
 ### Memory-mapped
 
-An IID-file is structured with a header and lookup table that maps the memory location of the IIDs and the corresponding segments. This enables selective (lazy) loading file-content. Lazy-loading is usefull when searching through large IID-files since you can limit parsing to the parts needed. This python implementation uses `mmap` to parse spesific parts of the file-buffer.
+An IID-file is structured with a header and lookup table that maps the memory location of the IIDs and the corresponding segments. This enables selective (lazy) loading of file-content. Lazy-loading is usefull when searching through large IID-files since you can limit parsing to the parts needed. This python implementation uses `mmap` to parse spesific parts of the file-buffer.
 
 ### Segments and regions
 
-Every IID has a corresponding segment. The segment are composed of one or more region. A region is defined by a bounding box and a binary mask. The structure is inspired by [region_props](https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops) from [skimage](https://scikit-image.org/). Segments can overlap, supporting multilabeling of same image-section. The current implementation supports up to `2^32-1` segments.
+Every IID has a corresponding segment. The segment are composed of one or more region. A region is defined by a bounding box and a binary mask. The structure is inspired by [region_props](https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops) from [skimage](https://scikit-image.org/). Segments can overlap, supporting multilabeling of the same pixels. The current implementation supports up to `2^32-1` segments.
 
 > Regions saves us from large but empty buffers when segment pixels are scattered across the image.
 
