@@ -1,4 +1,4 @@
-# IID fileformat (.iid)
+# IID file format (.iid)
 
 > DISCLAIMER: This is still under development, it's been implemented to store the segmentation data for [ae73edb74571e4e2](https://www.instagram.com/ae73edb74571e4e2) so it works but changes will happen.
 
