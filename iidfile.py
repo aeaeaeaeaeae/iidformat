@@ -628,6 +628,14 @@ class Segment:
 
         return buf
 
+    def xywh(self):
+        """Bounding box as rectangle coordinates"""
+        minr, minc, maxr, maxc = self.bbox
+        x = minc
+        y = minr
+        w = maxc - minc
+        h = maxr - minr
+        return x, y, w, h
 
 class Regions:
 
@@ -681,3 +689,12 @@ class Region:
 
         buffer = b'' + pack("4H", *self.bbox) + pack("%sB" % len(x), *x)
         return b'' + pack("I", len(buffer) + 4) + buffer
+
+    def xywh(self):
+        """Bounding box as rectangle coordinates"""
+        minr, minc, maxr, maxc = self.bbox
+        x = minc
+        y = minr
+        w = maxc - minc
+        h = maxr - minr
+        return x, y, w, h
