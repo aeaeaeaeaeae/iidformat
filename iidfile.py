@@ -2,6 +2,7 @@ from itertools import chain
 import json
 from mmap import mmap
 import numpy as np
+from skimage.measure import label, regionprops
 import os
 from struct import pack, unpack
 
@@ -682,6 +683,33 @@ class Segment:
             maxc = maxc - x
             buf[minr:maxr, minc:maxc] = reg.mask
         return buf
+
+    def from_buffer(self, buffer, bbox):
+        """Creates regions from buffer
+        :param buffer:  (numpy) binary buffer
+        :param bbox:    (tuple) minr, minc, maxr, maxc
+        """
+
+        self.bbox = bbox
+        x, y, w, h = self.xywh()
+        self.area = w * h
+
+        regions = []
+        for props in regionprops(label(buffer, connectivity=2)):
+
+            bbox = props.bbox
+            mask = props.image
+
+            # Offset to segment bbox (places region bbox in world space)
+            minr, minc, maxr, maxc = bbox
+            minr = minr + y
+            minc = minc + x
+            maxr = maxr + y
+            maxc = maxc + x
+
+            regions.append(Region(mask, (minr, minc, maxr, maxc)))
+
+        self.regions = Regions(regions=Regions)
 
 class Regions:
 
