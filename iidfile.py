@@ -192,6 +192,39 @@ class IIDFile:
 
         return matches
 
+    def segs_at(self, x, y):
+        """Segments covering point position. (only searches over fetched segments)"""
+
+        x = int(x)
+        y = int(y)
+
+        def bbox_collision(bbox):
+            minr, minc, maxr, maxc = bbox
+            return (minr <= y < maxr) and (minc <= x < maxc)
+
+        def mask_collision(reg):
+            minr, minc, maxr, maxc = reg.bbox
+            c = x - minc  # x relative to mask
+            r = y - minr  # y relative to mask
+            return reg.mask[r, c]
+
+        def region_collision(regions):
+            collisions = [reg for reg in regions.entries if bbox_collision(reg.bbox)]
+            if len(collisions) > 0:
+                collisions = [reg for reg in collisions if mask_collision(reg)]
+                return len(collisions) > 0
+
+        # Filter fetched
+        entries = [self.lut.entries[i] for i in self.lut.fetched]
+
+        # Filter by segment bbox
+        entries = [entry for entry in entries if bbox_collision(entry.seg.bbox)]
+
+        # Filter by region bbox
+        entries = [entry for entry in entries if region_collision(entry.seg.regions)]
+
+        return entries
+
     def group(self, name, entries=None, keys=None, iids=None, segs=None):
         self.groups.add(name, entries=entries, keys=keys, iids=iids, segs=segs)
 
