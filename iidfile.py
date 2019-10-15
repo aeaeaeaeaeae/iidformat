@@ -670,11 +670,29 @@ class Segment:
         h = maxr - minr
         return x, y, w, h
 
+    def buffer(self):
+        """Creates a numpy buffer from regions"""
+        x, y, w, h = self.xywh()
+        buf = np.zeros((h, w))
+        for reg in self.regions():
+            minr, minc, maxr, maxc = reg.bbox
+            minr = minr - y
+            minc = minc - x
+            maxr = maxr - y
+            maxc = maxc - x
+            buf[minr:maxr, minc:maxc] = reg.mask
+        return buf
+
 class Regions:
 
     def __init__(self, regions=None):
 
         self.entries = [] if regions is None else regions
+
+
+    def __call__(self):
+        """Returns list of regions"""
+        return self.entries
 
     def load(self, buf):
         o = 0
