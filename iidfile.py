@@ -709,7 +709,7 @@ class Segment:
 
             regions.append(Region(mask, (minr, minc, maxr, maxc)))
 
-        self.regions = Regions(regions=Regions)
+        self.regions = Regions(regions=regions)
 
 class Regions:
 
