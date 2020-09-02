@@ -30,10 +30,6 @@ class BufferLocation:
         return pack("II", self.offset, self.length)
 
 
-def dump_str(s):
-    return bytes(s) if s else b''
-
-
 class IIDFile:
 
     def __init__(self, fpath=None, groups=None):
@@ -107,7 +103,9 @@ class IIDFile:
         self.mmap = mmap(self.file.fileno(), 0)
 
     def add(self, iid, seg, group=None):
-        """
+        """Add an IID and its corresponding segment to this file,
+        this will append the IID to the end of the lookuptable.
+
         :param iid:    (obj) IID, required
         :param seg:    (obj) Segment, required
         :param group:  (str) Group name
@@ -418,6 +416,29 @@ class IID:
     __slots__ = ('iid', 'domain', 'key', 'bufloc')
 
     def __init__(self, iid=None, domain=None, key=None, bufloc=None):
+        """Individual IDentifier. The iid and domain values must be encoded
+        byte strings, this is considered the base iid format. Decoding into
+        int32, int64, str or other protocols are just interpretations of the
+        bytes sequence. The interpretation is irrelevant as long as the
+        iid is converted back to the original byte sequence before stored
+        into another iid file. When storing an iid in an interpreted state,
+        say outside an IIDFile, the protocol should be noted in order to be 
+        able to convert back to the original byte sequence.
+
+        :param iid:     (bytes) byte string using struct.pack() or foo.encode()
+        :param domain:  (bytes) byte string
+        :param key:     (int) index position in file lookuptable. This argument 
+                        can be ignored when creating a new IID, since the 
+                        IIDFile.add() method will override the key field when 
+                        including the new IID object.
+        :param bufloc:  (BufferLocation) 
+        """
+
+        if iid is not None and not isinstance(iid, bytes):
+            raise ValueError("'iid' must be encoded as bytes")
+
+        if domain is not None and not isinstance(dom, bytes):
+            raise ValueError("'domain' must be encoded as bytes")
 
         self.iid = iid
         self.domain = domain
@@ -433,9 +454,9 @@ class IID:
         self.iid = buf[o:o+iid_len]
 
     def dump(self, offset=None):
-
-        iid = dump_str(self.iid)
-        dom = dump_str(self.domain)
+        
+        iid = self.iid if self.iid else b''
+        dom = self.domain if self.domain else b''
         buf = pack("I", self.key) + pack("I", len(dom)) + pack("I", len(iid)) + dom + iid
 
         if offset is not None:
@@ -710,6 +731,7 @@ class Segment:
             regions.append(Region(mask, (minr, minc, maxr, maxc)))
 
         self.regions = Regions(regions=regions)
+
 
 class Regions:
 
