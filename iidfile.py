@@ -437,7 +437,7 @@ class IID:
         if iid is not None and not isinstance(iid, bytes):
             raise ValueError("'iid' must be encoded as bytes")
 
-        if domain is not None and not isinstance(dom, bytes):
+        if domain is not None and not isinstance(domain, bytes):
             raise ValueError("'domain' must be encoded as bytes")
 
         self.iid = iid
