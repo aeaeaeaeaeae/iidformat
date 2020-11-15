@@ -571,25 +571,43 @@ class Groups:
 class Group:
 
     def __init__(self, name, entries=None, bufloc=None):
+        """A group is a key set that maps to entries in the lookup table.
+
+        The group object should not be exposed directly to the user, all access to the group
+        content should go through the IID file methods.
+
+        :param name:     (str) name of group
+        :param entries:  (list) entries
+        :param bufloc:   (bufloc) object buffer location
         """
 
-        :param name:
-        :param entries:
-        :param bufloc:
-        """
+        # TODO: Remove self.entries from group and only store the key set.
+        # There is no real usage of the self.entries beyond the scope of the Group object,
+        # It's better to condense the group to only be name and a set of keys that reference
+        # entries in the file iid lookup table.
 
         self.name = name
         self.keys_set = None
-        self.entries = set(entries) if entries else None
+        self.entries = None
         self.bufloc = bufloc
+
+        if entries:
+            self.add(entries)
 
     def add(self, entries):
         """Adds entries to group, maintains keys set.
 
+        WARNING: only entries already loaded in the LUT of the current file can be added,
+        adding entries from another IID file will add broken and bad keys to the group
+        key set.
+
         :param entries:  (list) LUT entries
         """
+
+        entries = set(entries)
+
         if self.entries is None:
-            self.entries = set(entries)
+            self.entries = entries
         else:
             self.entries.update(entries)
 
@@ -608,8 +626,6 @@ class Group:
     def load(self, buf, lut=None):
         """Loads group keys from buffer and maps group entries list to LUT if LUT is loaded.
 
-        This method will overwrite the keys and entries fields with the data from the buffer.
-
         :param buf:  (buffer) group buffer
         :param lut:  (obj) IIDFile LUT
         """
@@ -618,6 +634,7 @@ class Group:
             self.entries = set([lut.entries[k] for k in self.keys_set])
 
     def dump(self):
+        """Dump object to bytes"""
         return pack("%sI" % len(self.entries), *[entry.key for entry in list(self.entries)])
 
 
