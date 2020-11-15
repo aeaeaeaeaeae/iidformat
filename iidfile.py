@@ -29,6 +29,13 @@ class BufferLocation:
     def dump(self):
         return pack("II", self.offset, self.length)
 
+    def buf(self, mmap):
+        """ Fetch buffer by location
+        :param mmap:  (mmap) memory map to fetch from
+        :return:      (buffer) byte buffer
+        """
+        return mmap[self.offset:self.offset + self.length]
+
 
 class IIDFile:
 
