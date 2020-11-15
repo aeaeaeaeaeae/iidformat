@@ -311,6 +311,10 @@ class LookupTable:
 
     def __init__(self, iidfile, keys=None):
         """
+        The order of the entries is immutable because the entry key corresponds to the index of the entries list.
+        New entries must be appended at the end, and when removing entries, rather than deleting the object from
+        the list the index should be set to None.
+
         :param iidfile:  (obj) IIDFile
         :param keys:     (list) keys to load, as when filtering by groups
         """
