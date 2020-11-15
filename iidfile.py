@@ -61,7 +61,7 @@ class IIDFile:
         self.groups = Groups(self)
 
         self.lut = None
-        keys = list(chain.from_iterable([group.keys() for group in self.groups.fetch(groups)])) if groups else None
+        keys = self.groups._keys(groups) if groups else None
 
         self.lut = LookupTable(self, keys=keys)
         self.iids = IIDs(self)
@@ -73,7 +73,7 @@ class IIDFile:
 
         # Dump buffers
         segs = self.segs.dump()
-        groups = self.groups.dump()
+        groups = self.groups._dump()
         meta = self.meta.dump()
         iids = self.iids.dump()
         lut = self.lut.dump()
@@ -90,7 +90,7 @@ class IIDFile:
         self.meta.bufloc = BufferLocation(offset, len(meta))
         offset += len(meta)
 
-        self.groups.bufloc = BufferLocation(offset, len(groups))
+        self.groups._bufloc = BufferLocation(offset, len(groups))
         offset += len(groups)
 
         self.segs.bufloc = BufferLocation(offset, len(segs))
@@ -122,10 +122,10 @@ class IIDFile:
         iid.key = key
         seg.key = key
 
-        entry = self.lut.add(key, iid, seg)
+        self.lut.add(key, iid, seg)
 
         if group:
-            self.groups.add(name=group, entries=[entry])
+            self.groups.add(name=group, keys=[key])
 
     def fetch(self, everything=False, keys=None, groups=None, iids=False, segs=False):
         """Lazy loads entries from file
@@ -143,7 +143,6 @@ class IIDFile:
             keys = [entry.key for entry in self.lut.entries]
             iids = True
             segs = True
-            self.groups.fetch(self.groups.entries)
 
         else:
 
@@ -156,7 +155,7 @@ class IIDFile:
             keys = keys if keys is not None else []
 
             if groups:
-                keys += list(chain.from_iterable([group.keys() for group in self.groups.fetch(groups)]))
+                keys.extend(self.groups._keys(groups))
 
         keys = set(keys)
 
@@ -188,7 +187,7 @@ class IIDFile:
             groups = [groups]
 
         if groups:
-            keys = list(chain.from_iterable([group.keys() for group in self.groups.fetch(groups)]))
+            keys = self.groups._keys(groups)
         else:
             keys = [entry.key for entry in self.lut.entries]
 
@@ -230,9 +229,6 @@ class IIDFile:
         entries = [entry for entry in entries if region_collision(entry.seg.regions)]
 
         return entries
-
-    def group(self, name, entries=None, keys=None, iids=None, segs=None):
-        self.groups.add(name, entries=entries, keys=keys, iids=iids, segs=segs)
 
 
 class Header:
@@ -287,7 +283,7 @@ class Header:
         self.bufloc_lut = self.iidfile.lut.bufloc
         self.bufloc_iids = self.iidfile.iids.bufloc
         self.bufloc_meta = self.iidfile.meta.bufloc
-        self.bufloc_groups = self.iidfile.groups.bufloc
+        self.bufloc_groups = self.iidfile.groups._bufloc
         self.bufloc_segs = self.iidfile.segs.bufloc
 
 
@@ -476,56 +472,39 @@ class Groups:
 
     def __init__(self, iidfile):
 
-        self.iidfile = iidfile
-        self.entries = {}
+        self._iidfile = iidfile
+        self._entries = {}
 
         if iidfile.exists:
-            self.bufloc = iidfile.header.bufloc_groups
-            self.mmap = iidfile.mmap
-            self.load()
+            self._bufloc = iidfile.header.bufloc_groups
+            self._mmap = iidfile.mmap
+            self._load()
 
-    def add(self, name, entries=None, keys=None, iids=None, segs=None):
-
-        try:
-            group = self.entries[name]
-        except KeyError:
-            group = Group(name)
-
-        if keys:
-            group.add([self.iidfile.lut.entries[k] for k in keys])
-
-        if entries:
-            group.add(entries)
-
-        if iids:
-            group.add([self.iidfile.lut.entries[iid.key] for iid in iids])
-
-        if segs:
-            group.add([self.iidfile.lut.entries[seg.key] for seg in segs])
-
-        self.entries[name] = group
-
-        return group
-
-    def fetch(self, groups):
-        """Fetches data for requested groups, this will overwrite any existing keys and entries.
-
-        :param groups:  (str) group name
+    def _objects(self, groups):
+        """Get the Group objects, which are hidden from the user.
+        :param groups:  (list) of group names (str)
         :returns:       (list) group objects
         """
+        return [self._entries[name] for name in groups]
 
-        for name in groups:
-            group = self.entries[name]
-            o, l = group.bufloc.offset, group.bufloc.length
-            group.load(buf=self.mmap[o:o+l], lut=self.iidfile.lut)
+    def _keys(self, groups):
+        """Get the key set of the requested groups
+        :param groups:  (list) of group names (str)
+        :return:        (set) of keys in groups
+        """
 
-        return [self.entries[name] for name in groups]
+        if isinstance(groups, str):
+            groups = [groups]
 
-    def load(self):
-        """Lazy loads groups from buffer"""
+        # chain.from_iterable makes a list of list into a single list
+        keys = chain.from_iterable([list(self._entries[group].key_set) for group in groups])
+        return list(set(keys))
 
-        o, l = self.bufloc.offset, self.bufloc.length
-        buf = self.mmap[o:o+l]
+    def _load(self):
+        """Load groups from buffer"""
+
+        o, l = self._bufloc.offset, self._bufloc.length
+        buf = self._mmap[o:o + l]
 
         length, = unpack("I", buf[:uint32])
         groups = json.loads(buf[uint32:uint32+length].decode('utf-8'))
@@ -533,13 +512,13 @@ class Groups:
         o += uint32+length
         for group in groups:
             name, offset, length = group['name'], group['offset'] + o, group['length']
-            self.entries[name] = Group(name, bufloc=BufferLocation(offset, length))
+            self._entries[name] = Group(name, bufloc=BufferLocation(offset, length), mmap=self._mmap)
 
-    def dump(self):
+    def _dump(self):
 
         offset = 0
         buffer, groups = [], []
-        for _, group in self.entries.items():
+        for _, group in self._entries.items():
             buf = group.dump()
             buffer.append(buf)
             groups.append({'name': group.name, 'offset': offset, 'length': len(buf)})
@@ -550,42 +529,63 @@ class Groups:
 
         return pack("I", len(groups)) + groups + buffer
 
-    def list(self):
-        """List group names
+    def add(self, name, keys=None):
+        """Group a set of entries
 
-        :return:  (list) group names
+        WARNING: entries, keys, iids or segs must already be part of the IID file
+
+        :param name:     (str) group name
+        :param keys:     (list) of LUT keys
         """
 
-        return sorted(self.entries.keys())
+        try:
+            group = self._entries[name]
+        except KeyError:
+            group = Group(name)
 
-    def get(self, groups):
-        """Get entries in groups
+        if keys:
+            group.add([self._iidfile.lut.entries[k] for k in keys])
+
+        self._entries[name] = group
+
+        return group
+
+    def list(self):
+        """
+        :return:  (list) group names (str)
+        """
+        return sorted(self._entries.keys())
+
+    def get(self, groups, segs=False):
+        """Get entries in groups, entries will be fetched if not loaded
 
         :param groups:  (list) group names
+        :param segs:    (bool) also fetch segs
         :return:        (list) lut entries
         """
 
         if isinstance(groups, str):
             groups = [groups]
 
-        out = []
+        keys = set()
         for group in groups:
-            out.extend(list(self.entries[group].entries))
+            group_keys = list(self._entries[group].keys_set)
+            keys.update(group_keys)
 
-        return out
+        return self._iidfile.fetch(keys=list(keys), segs=segs)
 
 
 class Group:
 
-    def __init__(self, name, entries=None, bufloc=None):
+    def __init__(self, name, bufloc=None, mmap=None):
         """A group is a key set that maps to entries in the lookup table.
 
         The group object should not be exposed directly to the user, all access to the group
         content should go through the IID file methods.
 
         :param name:     (str) name of group
-        :param entries:  (list) entries
         :param bufloc:   (bufloc) object buffer location
+        :param mmap:     (mmap) iidfile buffer mmap (used to load on object creation)
         """
 
         # TODO: Remove self.entries from group and only store the key set.
@@ -595,11 +595,10 @@ class Group:
 
         self.name = name
         self.keys_set = None
-        self.entries = None
         self.bufloc = bufloc
 
-        if entries:
-            self.add(entries)
+        if mmap:
+            self.load(bufloc.buf(mmap))
 
     def add(self, entries):
         """Adds entries to group, maintains keys set.
@@ -612,12 +611,6 @@ class Group:
         """
 
         entries = set(entries)
-
-        if self.entries is None:
-            self.entries = entries
-        else:
-            self.entries.update(entries)
-
         keys = [entry.key for entry in entries]
         if self.keys_set is None:
             self.keys_set = set(keys)
@@ -637,12 +630,10 @@ class Group:
         :param lut:  (obj) IIDFile LUT
         """
         self.keys_set = set(unpack("%sI" % (len(buf) // uint32), buf))  # Load all keys from buffer
-        if lut:
-            self.entries = set([lut.entries[k] for k in self.keys_set])
 
     def dump(self):
         """Dump object to bytes"""
-        return pack("%sI" % len(self.entries), *[entry.key for entry in list(self.entries)])
+        return pack("%sI" % len(self.keys_set), *self.keys_set)
 
 
 class Segments:
