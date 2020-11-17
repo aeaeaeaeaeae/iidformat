@@ -127,35 +127,37 @@ class IIDFile:
         if group:
             self.groups.add(name=group, keys=[key])
 
-    def fetch(self, everything=False, keys=None, groups=None, iids=False, segs=False):
+    def fetch(self, keys=None, all_keys=False, groups=None, iids=False, segs=False, everything=False):
         """Lazy loads entries from file
 
-        :param everything:  (bool) load everything
-        :param keys:        (list) keys to fetch
+        :param keys:        (int|list) keys to fetch
+        :param all_keys:    (bool) loads all keys. This differs from 'everything' in that it
+                            still respects the groups, iids, segs arguments. Everything loads
+                            the entire file.
         :param groups:      (list) groups to fetch
-        :param iids:        (bool) fetches iids
-        :param segs:        (bool) fetches segments
-        :return:            (list) of entries fetched
+        :param iids:        (bool) fetch iids
+        :param segs:        (bool) fetch segments
+        :param everything:  (bool) load everything
+        :return:            (list) of entries
         """
 
         if everything:
-
             keys = [entry.key for entry in self.lut.entries]
             iids = True
             segs = True
 
         else:
-
             if isinstance(keys, int):
                 keys = [keys]
-
             if isinstance(groups, str):
                 groups = [groups]
 
-            keys = keys if keys is not None else []
-
             if groups:
-                keys.extend(self.groups._keys(groups))
+                keys = self.groups.get(groups)
+            elif all_keys:
+                keys = [entry.key for entry in self.lut.entries]
+            else:
+                keys = [] if keys is None else keys
 
         keys = set(keys)
 
@@ -168,65 +170,62 @@ class IIDFile:
 
         return [self.lut.entries[key] for key in keys]
 
-    def find(self, iids, groups=None, is_hex=False):
+    def find(self, iids, groups=None, domains=None, segs=False):
         """Looks for matching iids in file
 
         :param iids:    (str|list) iids to look for
         :param groups:  (str|list) limit search to groups
-        :param is_hex:  (bool) should iids be parsed as hex formatted byte strings?
-        :returns:       (list) { key, iid }
+        :param domains: (str|list) limit search to domains
+        :param segs:    (bool) fetch segments
+        :returns:       (list) of entries
         """
 
         if not isinstance(iids, list):
             iids = [iids]
-
-        if is_hex:
-            iids = [bytes.fromhex(iid) for iid in iids]
-
-        if isinstance(groups, str):
+        if groups and isinstance(groups, list) is False:
             groups = [groups]
+        if domains and isinstance(domains, list) is False:
+            domains = [domains]
 
         if groups:
-            keys = self.groups._keys(groups)
+            entries = self.groups.get(groups, segs=segs)
         else:
-            keys = [entry.key for entry in self.lut.entries]
+            entries = self.fetch(all_keys=True, iids=True, segs=segs)
 
-        # TODO: currently ignoring domain, how should this be included?
-        entries = self.fetch(keys=keys, iids=True)
-        matches = [entry for entry in entries if entry.iid.iid in iids]
+        if domains:
+            entries = [entry for entry in entries if entry.iid.domain in domains]
 
-        return matches
+        return [entry for entry in entries if entry.iid.iid in iids]
 
-    def segs_at(self, x, y):
-        """Segments covering point position. (only searches over fetched segments)"""
+    def filter(self, groups=None, area=None, domains=None, segs=False):
+        """Filters for segments in file
 
-        x = int(x)
-        y = int(y)
+        :param groups:   (str|list) filters by groups
+        :param area:     (tuple) filter segments within area range (min, max), where None ignores the bound,
+                         ex.: (100, None) means that segments from 100px and upwards are returned.
+        :param domains:  (bytes|list) filter by domains
+        :param segs:     (bool) fetch segments
+        :return:         (list) of entries
+        """
 
-        def bbox_collision(bbox):
-            minr, minc, maxr, maxc = bbox
-            return (minr <= y < maxr) and (minc <= x < maxc)
+        segs = True if area else segs  # Area search requires segmetns
 
-        def mask_collision(reg):
-            minr, minc, maxr, maxc = reg.bbox
-            c = x - minc  # x relative to mask
-            r = y - minr  # y relative to mask
-            return reg.mask[r, c]
+        if groups:
+            if not isinstance(groups, list):
+                groups = [groups]
+            entries = self.fetch(groups=groups, iids=True, segs=segs)
+        else:
+            entries = self.fetch(all_keys=True, iids=True, segs=segs)
 
-        def region_collision(regions):
-            collisions = [reg for reg in regions.entries if bbox_collision(reg.bbox)]
-            if len(collisions) > 0:
-                collisions = [reg for reg in collisions if mask_collision(reg)]
-                return len(collisions) > 0
+        if domains:
+            if not isinstance(domains, list):
+                domains = [domains]
+            entries = [entry for entry in entries if entry.iid.domain in domains]
 
-        # Filter fetched
-        entries = [self.lut.entries[i] for i in self.lut.fetched]
-
-        # Filter by segment bbox
-        entries = [entry for entry in entries if bbox_collision(entry.seg.bbox)]
-
-        # Filter by region bbox
-        entries = [entry for entry in entries if region_collision(entry.seg.regions)]
+        if area:
+            min_area = 0 if area[0] is None else area[0]
+            max_area = float('inf') if area[1] is None else area[1]
+            entries = [entry for entry in entries if min_area < entry.seg.area < max_area]
 
         return entries
 
@@ -501,7 +500,7 @@ class Groups:
             groups = [groups]
 
         # chain.from_iterable makes a list of list into a single list
-        keys = chain.from_iterable([list(self._entries[group].key_set) for group in groups])
+        keys = chain.from_iterable([list(self._entries[group].keys_set) for group in groups])
         return list(set(keys))
 
     def _load(self):
