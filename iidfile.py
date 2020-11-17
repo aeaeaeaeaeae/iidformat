@@ -153,7 +153,7 @@ class IIDFile:
                 groups = [groups]
 
             if groups:
-                keys = self.groups.get(groups)
+                keys = self.groups.get(groups, keys_only=True)
             elif all_keys:
                 keys = [entry.key for entry in self.lut.entries]
             else:
@@ -559,12 +559,13 @@ class Groups:
         """
         return sorted(self._entries.keys())
 
-    def get(self, groups, segs=False):
+    def get(self, groups, keys_only=False, segs=False):
         """Get entries in groups, entries will be fetched if not loaded
 
-        :param groups:  (list) group names
-        :param segs:    (bool) also fetch segs
-        :return:        (list) lut entries
+        :param groups:     (list) group names
+        :param keys_only:  (bool) return keys instead of entries
+        :param segs:       (bool) also fetch segs
+        :return:           (list) lut entries
         """
 
         if isinstance(groups, str):
@@ -575,7 +576,10 @@ class Groups:
             group_keys = list(self._entries[group].keys_set)
             keys.update(group_keys)
 
-        return self._iidfile.fetch(keys=list(keys), segs=segs)
+        if keys_only:
+            return keys
+        else:
+            return self._iidfile.fetch(keys=list(keys), segs=segs)
 
 
 class Group:
