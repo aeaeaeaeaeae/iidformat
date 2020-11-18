@@ -601,11 +601,6 @@ class Group:
         :param mmap:     (mmap) iidfile buffer mmap (used to load on object creation)
         """
 
-        # TODO: Remove self.entries from group and only store the key set.
-        # There is no real usage of the self.entries beyond the scope of the Group object,
-        # It's better to condense the group to only be name and a set of keys that reference
-        # entries in the file iid lookup table.
-
         self.name = name
         self.keys_set = None
         self.bufloc = bufloc
