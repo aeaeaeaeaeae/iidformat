@@ -123,8 +123,8 @@ class IIDFile:
         # In that case the IID's should either merge, or it should raise a warning.
 
         key = len(self.lut.entries)
-        # TODO: Rename IID.iid to IID.address
-        iid = IID(key=key, iid=address, domain=domain)
+
+        iid = IID(key=key, address=address, domain=domain)
         seg = Segment(key=key, bbox=bbox)
         seg.from_mask(mask, bbox)
 
@@ -427,7 +427,7 @@ class IID:
 
     __slots__ = ('iid', 'domain', 'key', 'bufloc')
 
-    def __init__(self, iid=None, domain=None, key=None, bufloc=None):
+    def __init__(self, address=None, domain=None, key=None, bufloc=None):
         """Individual IDentifier. The iid and domain values must be encoded
         byte strings, this is considered the base iid format. Decoding into
         int32, int64, str or other protocols are just interpretations of the
@@ -437,22 +437,22 @@ class IID:
         say outside an IIDFile, the protocol should be noted in order to be 
         able to convert back to the original byte sequence.
 
-        :param iid:     (bytes) byte string using struct.pack() or foo.encode()
-        :param domain:  (bytes) byte string
-        :param key:     (int) index position in file lookuptable. This argument 
-                        can be ignored when creating a new IID, since the 
-                        IIDFile.add() method will override the key field when 
-                        including the new IID object.
-        :param bufloc:  (BufferLocation) 
+        :param address:  (bytes) byte string using struct.pack() or foo.encode()
+        :param domain:   (bytes) byte string
+        :param key:      (int) index position in file lookuptable. This argument
+                         can be ignored when creating a new IID, since the
+                         IIDFile.add() method will override the key field when
+                         including the new IID object.
+        :param bufloc:   (BufferLocation)
         """
 
-        if iid is not None and not isinstance(iid, bytes):
+        if address is not None and not isinstance(address, bytes):
             raise ValueError("'iid' must be encoded as bytes")
 
         if domain is not None and not isinstance(domain, bytes):
             raise ValueError("'domain' must be encoded as bytes")
 
-        self.iid = iid
+        self.iid = address
         self.domain = domain
         self.key = key
         self.bufloc = bufloc
