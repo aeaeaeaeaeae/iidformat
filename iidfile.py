@@ -662,13 +662,13 @@ class Segments:
             o, l = bufloc.offset, bufloc.length
             return mmap[offset+o:offset+o+l]
 
-        [seg.load(buf=buf(self.mmap, seg.bufloc, offset)) for seg in segs]
+        [seg._load(buf=buf(self.mmap, seg.bufloc, offset)) for seg in segs]
 
     def dump(self):
         offset = 0
         buffer = []
         for entry in self.iidfile.lut.entries:
-            buf = entry.seg.dump(offset=offset)
+            buf = entry.seg._dump(offset=offset)
             buffer.append(buf)
             offset += len(buf)
 
@@ -680,6 +680,15 @@ class Segment:
     __slots__ = ('key', 'bbox', 'area', 'regions', 'bufloc')
 
     def __init__(self, key=None, bbox=None, area=None, regions=None, bufloc=None):
+        """Segments represents the area covered by an IID. Segments are stored
+        as regions, which are the disjoint areas that make up the segment mask.
+
+        :param key:      (int) index in lookup table
+        :param bbox:     (tuple) segment bounding box (minr, minc, maxr, maxc)
+        :param area:     (int) area coverage in pixels
+        :param regions:  (Regions)
+        :param bufloc:   (BufferLocation)
+        """
 
         self.key = key
         self.bbox = bbox
@@ -687,26 +696,26 @@ class Segment:
         self.regions = regions
         self.bufloc = bufloc
 
-    def load(self, buf):
+    def _load(self, buf):
         s = uint32+uint16*4+uint32
         self.key, a, b, c, d, self.area = unpack("IHHHHI", buf[:s])
         self.bbox = (a, b, c, d)
         self.regions = Regions()
         self.regions._load(buf[s:])
 
-    def dump(self, offset=None):
-
+    def _dump(self, offset=None):
         regs = self.regions._dump()
         buf = pack("IHHHHI", self.key, *self.bbox, self.area)
         buf += regs
-
         if offset is not None:
             self.bufloc = BufferLocation(offset, len(buf))
-
         return buf
 
-    def xywh(self):
-        """Bounding box as rectangle coordinates"""
+    def bbox_xywh(self):
+        """Bounding box as rectangle coordinates, with xy in upper-right corner.
+
+        :return:  (tuple) x, y, w, h
+        """
         minr, minc, maxr, maxc = self.bbox
         x = minc
         y = minr
@@ -714,32 +723,55 @@ class Segment:
         h = maxr - minr
         return x, y, w, h
 
-    def buffer(self):
-        """Creates a numpy buffer from regions"""
-        x, y, w, h = self.xywh()
-        buf = np.zeros((h, w))
+    def bbox_polygon(self):
+        """Bounding box as polygon point coordinates, starting from upper-right corner.
+
+        :return:  (list) of xy coordinate tuples
+        """
+        x, y, w, h = self.bbox_xywh()
+        return [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
+
+    def mask(self):
+        """Get segment mask. The mask corresponds with the bounding box.
+
+        :return:  (numpy) binary buffer
+        """
+
+        # Generate a mask from the segment regions.
+        x, y, w, h = self.bbox_xywh()
+        buf = np.zeros((h, w), dtype=np.bool)
         for reg in self.regions():
             minr, minc, maxr, maxc = reg.bbox
             minr = minr - y
             minc = minc - x
             maxr = maxr - y
             maxc = maxc - x
-            buf[minr:maxr, minc:maxc] = reg.mask
+            buf[minr:maxr, minc:maxc] = buf[minr:maxr, minc:maxc] | reg.mask
+
         return buf
 
-    def from_buffer(self, buffer, bbox):
-        """Creates regions from buffer
-        :param buffer:  (numpy) binary buffer
-        :param bbox:    (tuple) minr, minc, maxr, maxc
+    def from_mask(self, mask, bbox):
+        """Sets the current segment mask. The mask must correspond to the bounding box.
+
+        :param mask:  (numpy) binary buffer
+        :param bbox:  (tuple) minr, minc, maxr, maxc
         """
 
+        # Check that bounding box matches mask
+        tmp = self.bbox
         self.bbox = bbox
-        x, y, w, h = self.xywh()
-        self.area = w * h
+        x, y, w, h = self.bbox_xywh()
 
+        if mask.shape != (h, w):
+            self.bbox = tmp
+            raise ValueError("Mask shape must match bounding box")
+
+        # Convert mask to regions
         regions = []
-        for props in regionprops(label(buffer, connectivity=2)):
+        area = 0
+        for props in regionprops(label(mask, connectivity=2)):
 
+            area = area + props.area
             bbox = props.bbox
             mask = props.image
 
@@ -750,8 +782,9 @@ class Segment:
             maxr = maxr + y
             maxc = maxc + x
 
-            regions.append(Region(mask, (minr, minc, maxr, maxc)))
+            regions.append(Region(mask=mask, bbox=(minr, minc, maxr, maxc)))
 
+        self.area = area
         self.regions = Regions(regions=regions)
 
 
