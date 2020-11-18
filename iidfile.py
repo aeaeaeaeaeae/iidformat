@@ -692,11 +692,11 @@ class Segment:
         self.key, a, b, c, d, self.area = unpack("IHHHHI", buf[:s])
         self.bbox = (a, b, c, d)
         self.regions = Regions()
-        self.regions.load(buf[s:])
+        self.regions._load(buf[s:])
 
     def dump(self, offset=None):
 
-        regs = self.regions.dump()
+        regs = self.regions._dump()
         buf = pack("IHHHHI", self.key, *self.bbox, self.area)
         buf += regs
 
@@ -758,27 +758,31 @@ class Segment:
 class Regions:
 
     def __init__(self, regions=None):
+        """Utility class for the regions of a segment.
 
-        self.entries = [] if regions is None else regions
-
+        :param regions:  (list) of Region objects
+        """
+        self._entries = [] if regions is None else regions
 
     def __call__(self):
-        """Returns list of regions"""
-        return self.entries
+        """
+        :return:  (list) of regions
+        """
+        return self._entries
 
-    def load(self, buf):
+    def _load(self, buf):
         o = 0
         while o < len(buf):
             length, = unpack("I", buf[o:o+uint32])
 
             reg = Region()
-            reg.load(buf[o:o+length])
-            self.entries.append(reg)
+            reg._load(buf[o:o + length])
+            self._entries.append(reg)
 
             o += length
 
-    def dump(self):
-        return b''.join([reg.dump() for reg in self.entries])
+    def _dump(self):
+        return b''.join([reg._dump() for reg in self._entries])
 
 
 class Region:
@@ -786,15 +790,22 @@ class Region:
     __slots__ = ('mask', 'bbox')
 
     def __init__(self, mask=None, bbox=None):
+        """Represents a region of a segment. Segments are broken into disjoint regions
+        to compress the segment mask. In several cases where the segment is scattered
+        and spread throughout the image, splitting these islands into independent buffers
+        saves storing all the blank space in between.
+
+        :param mask:  (numpy) binary array
+        :param bbox:  (tuple) mask bounding box (minr, minc, maxr, maxc)
+        """
 
         self.mask = mask
         self.bbox = bbox
 
-    def load(self, buf):
+    def _load(self, buf):
 
         # The mask buffer is padded to full bytes with np.packbits(), when unpacking
         # the resulting array must be clipped at 'num mask pixels', derived from the bbox.
-
         s = uint32 + uint16*4
         _, a, b, c, d = unpack("IHHHH", buf[:s])
         x = unpack("%sB" % (len(buf) - s), buf[s:])
@@ -805,19 +816,29 @@ class Region:
         self.bbox = (a, b, c, d)
         self.mask = x
 
-    def dump(self):
-
+    def _dump(self):
         x = np.ndarray.flatten(self.mask)
         x = np.packbits(x)
 
         buffer = b'' + pack("4H", *self.bbox) + pack("%sB" % len(x), *x)
         return b'' + pack("I", len(buffer) + 4) + buffer
 
-    def xywh(self):
-        """Bounding box as rectangle coordinates"""
+    def bbox_xywh(self):
+        """Bounding box as rectangle coordinates, with xy in upper-right corner.
+
+        :return:  (tuple) x, y, w, h
+        """
         minr, minc, maxr, maxc = self.bbox
         x = minc
         y = minr
         w = maxc - minc
         h = maxr - minr
         return x, y, w, h
+
+    def bbox_polygon(self):
+        """Bounding box as polygon point coordinates, starting from upper-right corner.
+
+        :return:  (list) of xy coordinate tuples
+        """
+        x, y, w, h = self.bbox_xywh()
+        return [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
