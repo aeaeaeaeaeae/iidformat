@@ -533,7 +533,7 @@ class Groups:
         return pack("I", len(groups)) + groups + buffer
 
     def add(self, name, keys=None):
-        """Group a set of entries
+        """Group a set of entries, will join keys if group exists.
 
         WARNING: entries, keys, iids or segs must already be part of the IID file
 
