@@ -109,18 +109,24 @@ class IIDFile:
         self.file = open(fpath, "r+b")
         self.mmap = mmap(self.file.fileno(), 0)
 
-    def add(self, iid, seg, group=None):
-        """Add an IID and its corresponding segment to this file,
-        this will append the IID to the end of the lookuptable.
+    def add(self, address, domain, bbox, mask, group=None):
+        """Add new IID segment
 
-        :param iid:    (obj) IID, required
-        :param seg:    (obj) Segment, required
-        :param group:  (str) Group name
+        :param address:  (bytes) iid name
+        :param domain:   (bytes) domain name
+        :param bbox:     (tuple) the mask bounding box (minr, minc, maxr, maxc)
+        :param mask:     (numpy) binary buffer, size must match bounding box
+        :param group:    (str) group name
         """
 
+        # TODO: Assert that new IID isn't already in file.
+        # In that case the IID's should either merge, or it should raise a warning.
+
         key = len(self.lut.entries)
-        iid.key = key
-        seg.key = key
+        # TODO: Rename IID.iid to IID.address
+        iid = IID(key=key, iid=address, domain=domain)
+        seg = Segment(key=key, bbox=bbox)
+        seg.from_mask(mask, bbox)
 
         self.lut.add(key, iid, seg)
 
