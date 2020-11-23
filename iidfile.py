@@ -172,7 +172,7 @@ class IIDFile:
         if iids:
             self.iids.fetch(keys)
 
-        self.lut.fetched.update(keys)
+        self.lut.fetched_keys.update(keys)
 
         return [self.lut.entries[key] for key in keys]
 
@@ -234,6 +234,33 @@ class IIDFile:
             entries = [entry for entry in entries if min_area < entry.seg.area < max_area]
 
         return entries
+
+    def at(self, x, y, everything=True):
+        """Get all segments at the given coordinate
+
+        :param x:           (int) x coordinate
+        :param y:           (int) y coordinate
+        :param everything:  (bool) fetch the entire file before searching the region,
+                            otherwise only loaded segs will we queried.
+        :return:   (list) of entries
+        """
+        return self.region(bbox=(y-1, x-1, y+1, x+1), everything=everything)
+
+    def region(self, bbox, everything=True):
+        """Get all segments within a given region
+
+        :param bbox:        (tuple) search region (minr, minc, maxr, maxc).
+        :param everything:  (bool) fetch the entire file before searching the region,
+                            otherwise only loaded segs will we queried.
+        :return:            (list) of entries
+        """
+
+        if everything:
+            entries = self.fetch(everything=everything)
+        else:
+            entries = self.lut.fetched_entries()
+
+        return [entry for entry in entries if entry.seg.intersects(bbox)]
 
 
 class Header:
@@ -326,7 +353,7 @@ class LookupTable:
 
         self.iidfile = iidfile
         self.entries = []
-        self.fetched = set()  # Keys of entries with fetched segment
+        self.fetched_keys = set()  # Keys of entries with fetched segments
 
         if iidfile.exists:
             self.bufloc = iidfile.header.bufloc_lut
@@ -337,6 +364,12 @@ class LookupTable:
         entry = LookupTableEntry(key, iid, seg)
         self.entries.append(entry)
         return entry
+
+    def fetched_entries(self):
+        """
+        :return:  (list) of fetched entries
+        """
+        return [self.entries[k] for k in self.fetched_keys]
 
     def load(self, keys=None):
         offset, length = self.bufloc.offset, self.bufloc.length
@@ -712,17 +745,13 @@ class Segment:
             self.bufloc = BufferLocation(offset, len(buf))
         return buf
 
-    def bbox_xywh(self):
+    def bbox_xywh(self, center=False):
         """Bounding box as rectangle coordinates, with xy in upper-right corner.
 
-        :return:  (tuple) x, y, w, h
+        :param center:  (bool) place x,y at the center of the bounding box
+        :return:        (tuple) x, y, w, h
         """
-        minr, minc, maxr, maxc = self.bbox
-        x = minc
-        y = minr
-        w = maxc - minc
-        h = maxr - minr
-        return x, y, w, h
+        return _bbox_to_xywh(self.bbox, center)
 
     def bbox_polygon(self):
         """Bounding box as polygon point coordinates, starting from upper-right corner.
@@ -787,6 +816,38 @@ class Segment:
 
         self.area = area
         self.regions = Regions(regions=regions)
+
+    def intersects(self, bbox):
+        """Check if segment intersects with bounding bbox
+
+        :param bbox:  (tuple) bounding box to intersect with (minr, minc, maxr, maxc)
+        :returns:     (bool)
+        """
+
+        minr, minc, maxr, maxc = bbox
+        xywh = _bbox_to_xywh(bbox, center=True)
+
+        # Check if it intersects with the segment bounding box
+        if not _bbox_intersects(self.bbox_xywh(center=True), xywh):
+            return False
+
+        # Check if it intersects with any of the region bounding boxes
+        regions = [reg for reg in self.regions() if _bbox_intersects(reg.bbox_xywh(center=True), xywh)]
+        if not regions:
+            return False
+
+        # Check if any region masks when cropped by the bounding box contain any True values,
+        # if so the segment intersects with the bounding box.
+        for reg in regions:
+            x, y, _, _ = reg.bbox_xywh()
+            if np.any(reg.mask[
+                max(0, minr - y):maxr - y,  # Crop region mask by offsetting the bounding box
+                max(0, minc - x):maxc - x   # to the region bounds.
+            ]):
+                return True
+
+        # No intersections found
+        return False
 
 
 class Regions:
@@ -857,17 +918,13 @@ class Region:
         buffer = b'' + pack("4H", *self.bbox) + pack("%sB" % len(x), *x)
         return b'' + pack("I", len(buffer) + 4) + buffer
 
-    def bbox_xywh(self):
+    def bbox_xywh(self, center=False):
         """Bounding box as rectangle coordinates, with xy in upper-right corner.
 
-        :return:  (tuple) x, y, w, h
+        :param center:  (bool) place x,y at the center of the bounding box
+        :return:        (tuple) x, y, w, h
         """
-        minr, minc, maxr, maxc = self.bbox
-        x = minc
-        y = minr
-        w = maxc - minc
-        h = maxr - minr
-        return x, y, w, h
+        return _bbox_to_xywh(self.bbox, center)
 
     def bbox_polygon(self):
         """Bounding box as polygon point coordinates, starting from upper-right corner.
@@ -876,3 +933,31 @@ class Region:
         """
         x, y, w, h = self.bbox_xywh()
         return [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
+
+
+def _bbox_intersects(a, b):
+    """Check if bounding boxes intersect
+    https://gamedev.stackexchange.com/questions/586/what-is-the-fastest-way-to-work-out-2d-bounding-box-intersection
+    :param a:  (tuple) xywh with xy centered
+    :param b:  (tuple) xywh with xy centered
+    :return:   (bool) does a intersect with b
+    """
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    return abs(ax - bx) * 2 < (aw + bw) and abs(ay - by) * 2 < (ah + bh)
+
+
+def _bbox_to_xywh(bbox, center=False):
+    """Bounding box as rectangle coordinates, with xy in upper-right corner.
+
+    :param center:  (bool) place x,y at the center of the bounding box
+    :return:        (tuple) x, y, w, h
+    """
+    minr, minc, maxr, maxc = bbox
+    x = minc
+    y = minr
+    w = maxc - minc
+    h = maxr - minr
+    if center:
+        x, y = x + w / 2.0, y + h / 2.0
+    return x, y, w, h
