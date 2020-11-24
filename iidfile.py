@@ -1,4 +1,4 @@
-from itertools import chain
+from itertools import chain, combinations
 import json
 from mmap import mmap
 import numpy as np
@@ -201,7 +201,7 @@ class IIDFile:
         if domains:
             entries = [entry for entry in entries if entry.iid.domain in domains]
 
-        return [entry for entry in entries if entry.iid.iid in iids]
+        return [entry for entry in entries if entry.iid.address in iids]
 
     def filter(self, groups=None, area=None, domains=None, segs=False):
         """Filters for segments in file
@@ -260,7 +260,37 @@ class IIDFile:
         else:
             entries = self.lut.fetched_entries()
 
-        return [entry for entry in entries if entry.seg.intersects(bbox)]
+        return [entry for entry in entries if entry.seg.intersects_bbox(bbox)]
+
+    def overlap_graph(self, everything=True):
+        """Computes a graph representation of segment overlaps.
+
+        The graph nodes are the segments and the edges store the number of pixels (area)
+        that overlap between them.
+
+        :param everything:  (bool) fetch the entire file before searching the region,
+                            otherwise only loaded segs will we queried.
+        :return:            (tuple of lists) nodes, edges. Nodes are a list of
+                            entries in the graph. Edges are tuples of two entries
+                            and a value storing the number of pixels that overlap
+                            between them. (A, B, pixels).
+        """
+
+        if everything:
+            entries = self.fetch(everything=everything)
+        else:
+            entries = self.lut.fetched_entries()
+
+        # Check all segment intersections once. Since there is no KD-tree or
+        # other search optimization segment tests has to be computed for everything.
+        # https://docs.python.org/3/library/itertools.html#itertools.combinations
+        # Elements are treated as unique based on their position, not on their value.
+        def _edge(a, b):
+            return a, b, a.seg.intersects_segment(b)
+        edges = [_edge(*pair) for pair in combinations(entries, 2)]
+        edges = [edge for edge in edges if edge[2] > 0]
+
+        return entries, edges
 
 
 class Header:
@@ -458,7 +488,7 @@ class IIDs:
 
 class IID:
 
-    __slots__ = ('iid', 'domain', 'key', 'bufloc')
+    __slots__ = ('address', 'domain', 'key', 'bufloc')
 
     def __init__(self, address=None, domain=None, key=None, bufloc=None):
         """Individual IDentifier. The iid and domain values must be encoded
@@ -485,7 +515,7 @@ class IID:
         if domain is not None and not isinstance(domain, bytes):
             raise ValueError("'domain' must be encoded as bytes")
 
-        self.iid = address
+        self.address = address
         self.domain = domain
         self.key = key
         self.bufloc = bufloc
@@ -496,11 +526,11 @@ class IID:
         o = uint32*3
         self.domain = None if dom_len == 0 else buf[o:o+dom_len]
         o = o + dom_len
-        self.iid = buf[o:o+iid_len]
+        self.address = buf[o:o+iid_len]
 
     def dump(self, offset=None):
         
-        iid = self.iid if self.iid else b''
+        iid = self.address if self.address else b''
         dom = self.domain if self.domain else b''
         buf = pack("I", self.key) + pack("I", len(dom)) + pack("I", len(iid)) + dom + iid
 
@@ -761,10 +791,11 @@ class Segment:
         x, y, w, h = self.bbox_xywh()
         return [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
 
-    def mask(self):
-        """Get segment mask. The mask corresponds with the bounding box.
+    def mask(self, bbox=None):
+        """Get segment mask. The mask corresponds with the segment bounding box
 
-        :return:  (numpy) binary buffer
+        :param bbox:  (tuple) will crop mask to bounding box (minr, minc, maxr, maxc)
+        :return:      (numpy) binary buffer
         """
 
         # Generate a mask from the segment regions.
@@ -778,7 +809,15 @@ class Segment:
             maxc = maxc - x
             buf[minr:maxr, minc:maxc] = buf[minr:maxr, minc:maxc] | reg.mask
 
-        return buf
+        if bbox is None:
+            return buf
+        else:
+            minr, minc, maxr, maxc = bbox
+            x, y, _, _ = self.bbox_xywh()
+            return buf[
+                max(0, minr - y):maxr - y,  # Crop the mask by offsetting the bounding box
+                max(0, minc - x):maxc - x   # to the mask local space.
+            ]
 
     def from_mask(self, mask, bbox):
         """Sets the current segment mask. The mask must correspond to the bounding box.
@@ -817,7 +856,7 @@ class Segment:
         self.area = area
         self.regions = Regions(regions=regions)
 
-    def intersects(self, bbox):
+    def intersects_bbox(self, bbox):
         """Check if segment intersects with bounding bbox
 
         :param bbox:  (tuple) bounding box to intersect with (minr, minc, maxr, maxc)
@@ -848,6 +887,20 @@ class Segment:
 
         # No intersections found
         return False
+
+    def intersects_segment(self, entry):
+        """Area of intersection with other segment
+
+        :param entry:  (obj) will check if segments overlap, will override bbox argument if provided.
+        :return:       (int) area of overlap in pixels
+        """
+
+        # Check if bounding box intersects
+        if not _bbox_intersects(self.bbox_xywh(center=True), entry.seg.bbox_xywh(center=True)):
+            return 0
+
+        # Counts the number of intersecting pixels
+        return int(np.sum(self.mask(bbox=entry.seg.bbox) & entry.seg.mask(bbox=self.bbox)))
 
 
 class Regions:
