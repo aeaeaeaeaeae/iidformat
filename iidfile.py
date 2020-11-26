@@ -39,14 +39,10 @@ class BufferLocation:
 
 class IIDFile:
 
-    def __init__(self, fpath=None, groups=None):
+    def __init__(self, fpath=None):
         """
         :param fpath:   (str) path to '.iid' file, creates empty IIDFile if None is provided.
-        :param groups:  (list) only load LUT for given group.
         """
-
-        if isinstance(groups, str):
-            groups = [groups]
 
         self.exists = fpath is not None
 
@@ -59,11 +55,7 @@ class IIDFile:
         self.header = Header(self)
         self.meta = Metadata(self)
         self.groups = Groups(self)
-
-        self.lut = None
-        keys = self.groups._keys(groups) if groups else None
-
-        self.lut = LookupTable(self, keys=keys)
+        self.lut = LookupTable(self)
         self.iids = IIDs(self)
 
         # Lazy
