@@ -125,16 +125,16 @@ class IIDFile:
         if group:
             self.groups.add(name=group, keys=[key])
 
-    def fetch(self, keys=None, all_keys=False, groups=None, iids=False, segs=False, everything=False):
-        """Lazy loads entries from file
+    def fetch(self, keys=None, all_keys=False, groups=None, iids=True, segs=True, everything=False):
+        """Selective loading of entries from file
 
-        :param keys:        (int|list) keys to fetch
-        :param all_keys:    (bool) loads all keys. This differs from 'everything' in that it
+        :param keys:        (int|list) keys for entries to fetch.
+        :param all_keys:    (bool) loads all entries. This differs from 'everything' in that it
                             still respects the groups, iids, segs arguments. Everything loads
                             the entire file.
-        :param groups:      (list) groups to fetch
-        :param iids:        (bool) fetch iids
-        :param segs:        (bool) fetch segments
+        :param groups:      (list) fetch all entries in group
+        :param iids:        (bool) fetch entry iid data
+        :param segs:        (bool) fetch entry segment data
         :param everything:  (bool) load everything
         :return:            (list) of entries
         """
@@ -168,52 +168,60 @@ class IIDFile:
 
         return [self.lut.entries[key] for key in keys]
 
-    def find(self, iids, groups=None, domains=None, segs=False):
-        """Looks for matching iids in file
+    def look_for(self, addresses, domains=None, groups=None, segs=False):
+        """Search for iids in file
 
-        :param iids:    (str|list) iids to look for
-        :param groups:  (str|list) limit search to groups
-        :param domains: (str|list) limit search to domains
-        :param segs:    (bool) fetch segments
-        :returns:       (list) of entries
+        :param addresses:  (str|list) iid addresses to look for (query)
+        :param domains:    (str|list) limit search to domains
+        :param groups:     (str|list) limit search to groups
+        :param segs:       (bool) fetch entry segment data
+        :returns:          (list) of entries matching query
         """
 
-        if not isinstance(iids, list):
-            iids = [iids]
+        if not isinstance(addresses, list):
+            addresses = [addresses]
         if groups and isinstance(groups, list) is False:
             groups = [groups]
         if domains and isinstance(domains, list) is False:
             domains = [domains]
 
         if groups:
-            entries = self.groups.get(groups, segs=segs)
+            entries = self.groups.get(groups, iids=True, segs=False)
         else:
-            entries = self.fetch(all_keys=True, iids=True, segs=segs)
+            entries = self.fetch(all_keys=True, iids=True, segs=False)
 
         if domains:
             entries = [entry for entry in entries if entry.iid.domain in domains]
 
-        return [entry for entry in entries if entry.iid.address in iids]
+        entries = [entry for entry in entries if entry.iid.address in addresses]
 
-    def filter(self, groups=None, area=None, domains=None, segs=False):
-        """Filters for segments in file
+        if segs:
+            # Only load the segments for entries matching query.
+            entries = self.fetch([entry.key for entry in entries], segs=segs)
 
-        :param groups:   (str|list) filters by groups
-        :param area:     (tuple) filter segments within area range (min, max), where None ignores the bound,
+        return entries
+
+    def filter(self, groups=None, area=None, domains=None, iids=True, segs=False):
+        """Filter loaded entries in file
+
+        :param groups:   (str|list) groups to include
+        :param area:     (tuple) include segments within area range (min, max), where None ignores the bound,
                          ex.: (100, None) means that segments from 100px and upwards are returned.
-        :param domains:  (bytes|list) filter by domains
-        :param segs:     (bool) fetch segments
+        :param domains:  (bytes|list) include domains
+        :param iids:     (bool) fetch entry iid data
+        :param segs:     (bool) fetch entry segment data
         :return:         (list) of entries
         """
 
-        segs = True if area else segs  # Area search requires segmetns
+        iids = True if domains else iids  # Domain search requires iid data
+        segs = True if area else segs  # Area search requires segment data
 
         if groups:
             if not isinstance(groups, list):
                 groups = [groups]
-            entries = self.fetch(groups=groups, iids=True, segs=segs)
+            entries = self.fetch(groups=groups, iids=iids, segs=segs)
         else:
-            entries = self.fetch(all_keys=True, iids=True, segs=segs)
+            entries = self.fetch(all_keys=True, iids=iids, segs=segs)
 
         if domains:
             if not isinstance(domains, list):
@@ -227,30 +235,28 @@ class IIDFile:
 
         return entries
 
-    def at(self, x, y, everything=True):
+    def at(self, x, y, only_loaded=False):
         """Get all segments at the given coordinate
 
-        :param x:           (int) x coordinate
-        :param y:           (int) y coordinate
-        :param everything:  (bool) fetch the entire file before searching the region,
-                            otherwise only loaded segs will we queried.
+        :param x:            (int) x coordinate
+        :param y:            (int) y coordinate
+        :param only_loaded:  (bool) only query loaded entries, otherwise everything will be fetched.
         :return:   (list) of entries
         """
-        return self.region(bbox=(y-1, x-1, y+1, x+1), everything=everything)
+        return self.region(bbox=(y-1, x-1, y+1, x+1), only_loaded=only_loaded)
 
-    def region(self, bbox, everything=True):
+    def region(self, bbox, only_loaded=False):
         """Get all segments within a given region
 
-        :param bbox:        (tuple) search region (minr, minc, maxr, maxc).
-        :param everything:  (bool) fetch the entire file before searching the region,
-                            otherwise only loaded segs will we queried.
-        :return:            (list) of entries
+        :param bbox:         (tuple) search region (minr, minc, maxr, maxc).
+        :param only_loaded:  (bool) only query loaded entries, otherwise everything will be fetched.
+        :return:             (list) of entries
         """
 
-        if everything:
-            entries = self.fetch(everything=everything)
-        else:
+        if only_loaded:
             entries = self.lut.fetched_entries()
+        else:
+            entries = self.fetch(everything=True)
 
         return [entry for entry in entries if entry.seg.intersects_bbox(bbox)]
 
@@ -620,12 +626,13 @@ class Groups:
         """
         return sorted(self._entries.keys())
 
-    def get(self, groups, keys_only=False, segs=False):
+    def get(self, groups, keys_only=False, iids=True, segs=False):
         """Get entries in groups, entries will be fetched if not loaded
 
         :param groups:     (list) group names
         :param keys_only:  (bool) return keys instead of entries
-        :param segs:       (bool) also fetch segs
+        :param iids:       (bool) also fetch entry iid data
+        :param segs:       (bool) also fetch entry segment data
         :return:           (list) lut entries
         """
 
@@ -640,7 +647,7 @@ class Groups:
         if keys_only:
             return keys
         else:
-            return self._iidfile.fetch(keys=list(keys), segs=segs)
+            return self._iidfile.fetch(keys=list(keys), iids=iids, segs=segs)
 
 
 class Group:
