@@ -1,130 +1,200 @@
-# IID fileformat (.iid)
+IID fileformat (.iid)
+=====================
 
-> DISCLAIMER: This is still under development, it's been implemented to store the segmentation data for [ae73edb74571e4e2](https://www.instagram.com/ae73edb74571e4e2) so it works but changes will happen.
+`.iid` files contains a list of masks and labels associated with an image. It is a file format for storing image segmentations mapped to **Individual IDentifiers** (IIDs). 
 
-`.iid` is a memory-mapped format for archival, search and retrival of image segmentations. This repository contains a python implementation and some example files.
+This package provides methods for loading, saving, searching and computing data from `.iid` files. 
 
-![segmentation](https://github.com/aeaeaeaeaeae/data/blob/master/segmentation.jpg)
+> Why? Because it was needed to map this [ae73edb74571e4e2](https://www.instagram.com/ae73edb74571e4e2).
 
-#### Segments and Individual-IDentifier
+## Installation
 
-An _IID-file_ only stores the segmentation, not the actual image. The segments are binary masks that covers sections of the image. The segments are labeled with **Individual IDentifiers** `IID`. These are _arbritary_ and _globally unique_ IDs associated with a spesific _individual_, where an individual is a distinct entity (object, concept, event and so on). 
+```bash 
+pip install iidfile
+```
 
-An IID is _arbritary_ in the sense that it does not have any formal relationship with the data it labels (it's not a hash). It's _globally unique_ in the sense that it is a global label, any data labeled with a specific IID is considered part of this individual.
+## Quick Example
 
-IIDs lets the data drive its own the definition. Since an IID is arbritary (made from random bytes) it is also meaningless, meaning therefore flows from the data to the label. The data (as experience) defines the individual (as word).
+~~~python
+from iidfile import IIDFile
 
-An IID is composed of two raw byte-strings, _domain_ and _iid_. The _domain_ defines the context (what language/protocol) and _iid_ defines the name of that individual in that context. There is no fixed length for either the _domain_ or _iid_ bytestring.
+mask = np.ones(shape, dtype=np.bool)
+bbox = (minr, minc, maxr, maxc)
 
-Features 
----------------
+# Create iidfile
+iidfile = IIDFile()
+iidfile.add(address=b'foo', domain=b'bar', bbox=bbox, mask=mask)
+iidfile.save('path/file.iid')
 
-### Memory-mapped
+# Load iidfile
+iidfile = IIDFile(fpath="path/file.iid")
+entries = iidfile.fetch(everything=True)
+~~~
 
-An IID-file is structured with a header and lookup table that maps the memory location of the IIDs and the corresponding segments. This enables selective (lazy) loading of file-content. Lazy-loading is usefull when searching through large IID-files since you can limit parsing to the parts needed. This python implementation uses `mmap` to parse spesific parts of the file-buffer.
+## Overview
 
-### Segments and regions
+IID files are not image files, rather they store labeled segments that maps a image file. The IID files have no set resolution, instead every segments has a bounding box that places the segment mask on the image it maps. There is no limit to the number segments or the ways that they can overlap. Overlaps has no depth hierachy, there is no concept of in front or behind.
 
-Every IID has a corresponding segment. The segment are composed of one or more region. A region is defined by a bounding box and a binary mask. The structure is inspired by [region_props](https://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.regionprops) from [skimage](https://scikit-image.org/). Segments can overlap, supporting multilabeling of the same pixels. The current implementation supports up to `2^32-1` segments.
+### Entries
 
-> Regions saves us from large but empty buffers when segment pixels are scattered across the image.
+Internally an `.iid` file contain a lookup table, where each _entry_ stores an IID and a segment pair. Each entry have a key, which correspond to their position in the lookup table.
 
-__Segment attributes__
+```python
+# Add entry (iid, segment) to iidfile
+iidfile.add(address=b'foo', domain=b'bar', bbox=bbox, mask=mask)
 
-+ __area__: number of masked pixels
-+ __bbox__: segment bounding box
-+ __regions__:
-    - bbox: region bounding box
-    - buffer: binary byte buffer
+# Get the first entry
+entry = iidfile.fetch(everything=True)[0]
+
+# Attributes
+key = entry.key
+address = entry.iid.address
+domain = entry.iid.domain
+mask = entry.seg.mask()
+bbox = entry.seg.bbox
+```
+
+### Segments
+
+Segments are binary masks placed by a bounding box. These masks are paired to a single IID each, and thereby maps the part of the image they cover to that spesific IID.
+
+### IID (Individual IDentifiers)
+
+IIDs are labels composed of an _address_ and a _domain_. Both the domain and address is stored as raw byte strings. There is no length limit to this bytestring. The domain defines the context (what language/protocol) and address defines the name of the label in that context.
+
+The purpose of IIDs is to provide globally unique labels that can link segments across `.iid` files.
+
+```python
+# Masks are binary numpy buffers
+mask = np.zeros(shape, dtype=np.bool)
+
+# Bounding boxes determine the placement of the mask in the image coordinate space
+h, w = mask.shape
+bbox = y, x, y+h, x+w  # minr, minc, maxr, maxc
+
+iidfile.add(address=b'foo', domain=b'bar', bbox=bbox, mask=mask)
+```
+
+## Features
+
+An IID-file is structured with a lookup table that maps the memory location of the entry data. This enables selective loading of file-content. Selective loading can limit the parsing needed when searching through large `.iid` files. This python implementation uses `mmap` to parse spesific parts of the file-buffer.
+
+#### Groups
+
+Groups are sets of entries, they enable faster and targeted loading of segments.
+
+```python
+# Adding entry to group on creation
+iidfile.add(address=b'foo', domain=b'bar', bbox=bbox, mask=mask, group='sys')
+iidfile.save('path/file.iid')
+
+# Only load segments in specified group
+iidfile = IIDFile(fpath='path/file.iid')
+entries = iidfile.fetch(groups=['sys'])
+```
+
+#### Metadata
+
+An embedded dict stores any additional meta data, this can be camera parameters or info about the external image. The dict must be JSON serializable.
+
+```python
+metadata = iidfile.meta.data
+```
+
+#### Segments and regions
+
+Internally segments are split up into smaller regions of connected patches, this compresses the segment mask buffer, especially when the mask is large and scattered.
 
 ![image segment regions](https://github.com/aeaeaeaeaeae/data/blob/master/image_segments_regions.jpg)
 
-### Groups
+## References
 
-Groups are sets of IIDs (and segments). It's an optimization feature enabling selective querying and loading of IIDs.
+> Use docstring for details.
 
-Groups lets you distinguish IIDs with particular properties. F.ex. a set of segments that labels classes of objects (trees, bushes, stones, grass) can be differentiated from segments of individuals (tree A, tree B, stone X, stone Y, ...). There might be tens of thousands of individuals yet only a few classes, groups lets you limit your loading and search to class IIDs.
+#### IIDFile
 
-### Metadata
++ `add` - Add an entry (iid and segment) to file
++ `save` - Save file to disk
++ `fetch` - Selective loading of entries
++ `look_for` - Search for iids
++ `filter` - Filter loaded entries
++ `at` - Get segments intersecting at position
++ `region` - Get segments intersecting with a given bounding box
++ `compute_overlap` - Computes an overlap graph from loaded segments
 
-Embedded JSON storing additional data, such as camera parameters and image properties.
 
-__Naming convension__
+## Examples
 
-```json
-{
-    "image": {
-        "width": "integer (pixels)",
-        "height": "integer (pixels)"
-    }, 
-    "camera": {
-        "translate": "float 3 vector", 
-        "rotate": "float 3 vector (degrees)", 
-        "fstop": "float", 
-        "focus": "float"
-    }, 
-    "keyframes": {
-        "frame": "integer", 
-        "lastFrame": "integer", 
-        "firstFrame": "integer"
-    }
-}
-```
+📦 [Download some example .iid files]()
 
-Usage
------
-
-Clone repository and link it up:
+#### Assign segments and save to disk
 
 ```python
-import sys
-sys.path.insert(0, path_to_repo)
-
 from iidfile import IIDFile
+
+iidfile = IIDFile()  # Creates empty iidfile
+
+data = [
+  (b'tree', numpy_buffer_1, xy_1),
+  (b'leaf', numpy_buffer_2, xy_2),
+  (b'root', numpy_buffer_3, xy_3)
+]
+
+for iid, mask, xy in data:
+
+  # Format bbox to minr, minc, maxr, maxc
+  x, y, w, h = *xy, mask.shape[1], mask.shape[0]
+  bbox = (y, x, y+h, x+w)
+
+  iidfile.add(address=iid, domain=b'example', bbox=bbox, mask=mask)
+
+iidfile.save(fpath='example.iid')
 ```
 
-### Example files
-
-📦 [download link]()
-
-### Example code
-
-__Creating IID-file__
+#### Fetch content from saved file
 
 ```python
-# Creates empty file
-file = IIDFile()
-
-# Populate file
-for s in segments:
-
-    iid = IID(s.iid, s.domain)
-    regs = Regions([Region(r.buffer, r.bbox) for r in s.regions])
-    seg = Segment(regions=regs, bbox=s.bbox, s=segment.area)
-
-    file.add(iid=iid, seg=seg, group='somegroup')
-
-file.save(fpath)
-```
-
-__Loading IID-file__
-
-```python
-# Loads entire file
-iidfile = IIDFile(fpath='somefile.iid')
+# Load everything
+iidfile = IIDFile(fpath='example.iid')
 entries = iidfile.fetch(everything=True)
 
-# Only load IIDs in group 'cls', this will NOT load the segments.
-iidfile = IIDFile(fpath='somefile.iid')
-entries = iidfile.fetch(groups=['cls'], iids=True)
+# Only load entries in group 'sys', and only load their iids,
+# this will not load their segments.
+iidfile = IIDFile(fpath='example.iid')
+entries = iidfile.fetch(groups=['sys'], iids=True)
 
-# Fetches both segments and iids of group 'cls'
-iidfile = IIDFile(fpath='somefile.iid')
-entries = iidfile.fetch(groups=['cls'], iids=True, segs=True)
+# Load all entries and only load their segments, 
+# this will not load their iids.
+iidfile = IIDFile(fpath='example.iid')
+entries = iidfile.fetch(all_keys=True, segs=True)
 
-# Fetches first 50 iids
-iidfile = IIDFile(fpath='somefile.iid')
+# Only load the first 50 entries.
+iidfile = IIDFile(fpath='example.iid')
 entries = iidfile.fetch(keys=range(50), iids=True)
+```
+
+#### Query, filter and look for content
+
+```python
+# Finds all segments intersecting at x:400, y:600.
+iidfile = IIDFile(fpath='example.iid')
+entries = iidfile.at(400, 600)
+
+# Only fetch entries in the group 'sys', do not load thier
+# iids and find which intersects with the bounding box.
+iidfile = IIDFile(fpath='example.iid')
+iidfile.fetch(group=['sys'], iids=False)
+entries = iidfile.region(bbox, only_loaded=True)
+
+# Check if iid addressess exists in file.
+iidfile = IIDFile(fpath='example.iid')
+entries = iidfile.look_for(addresses=[b'tree', b'leaf'])
+
+# Filter entries in file, this return entries in the group
+# 'rep' with a segment area of 4000 and greater.
+iidfile = IIDFile(fpath='example.iid')
+iidfile.fetch(everything=True)
+entries = iidfile.filter(groups=['rep'], area=(4000, None))
 ```
 
 Fileformat
